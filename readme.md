@@ -36,7 +36,7 @@ A Python utility to bulk-rename your **TV Series files** into a clean, consisten
    REMOTE_HOST=your.remote.host
    REMOTE_PORT=31422
    REMOTE_SERIES_PATH=/path/to/series/folder
-   MOUNT_POINT=/home/youruser/mnt/series
+   MOUNT_POINT=/home/your.user/mnt/series
    AUTO_RUN=False
    ```
 
