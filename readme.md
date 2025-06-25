@@ -40,6 +40,8 @@ A Python utility to bulk-rename your **TV Series files** into a clean, consisten
    AUTO_RUN=False
    ```
 
+**Load the `.env` file** into your current shell session: ````bash set -a source .env set +a ```` This exports all variables in `.env` so they can be used in subsequent commands. </pre>
+
 2. **Mount** the remote directory:
    ```bash
    mkdir -p "$MOUNT_POINT"
@@ -60,6 +62,11 @@ A Python utility to bulk-rename your **TV Series files** into a clean, consisten
 
 6. **(Optional)** After renaming completes, you’ll be prompted for a rollback. Type `y` to revert all changes.
 
+7. Unmount the folder from step 2
+   ```bash
+   chmod +x safe_lazy_unmount.sh
+   ./safe_lazy_unmount.sh "$MOUNT_POINT"
+   ```
 ---
 
 ## 🔄 Dry-Run & Auto-Run

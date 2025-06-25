@@ -1,7 +1,7 @@
 import os, re, stat, logging
 from pathlib import Path
 from dotenv import load_dotenv
-
+import signal
 
 # ─────────────────────────────────────────────
 # PREPARATION: SSHFS MOUNT VARIABLES
@@ -159,6 +159,105 @@ def rollback(executed):
     logger.warning("Rollback complete")
 
 # ─────────────────────────────────────────────
+# Checks for inconsistent files
+# ─────────────────────────────────────────────
+def check_outliers(ops):
+    """
+    Detect files in the target directory that don’t match the rename operations
+    (e.g. contain PSArips.com.txt, .url, etc.), and prompt to keep or delete them.
+    """
+    if not ops:
+        logger.info("No operations to determine target directory for outlier check.")
+        return
+
+    # All ops target the same folder
+    directory = os.path.dirname(ops[0].src)
+    try:
+        all_files = os.listdir(directory)
+    except OSError as e:
+        logger.error(f"[Outliers] Failed to list directory '{directory}': {e}")
+        return
+
+    # Files involved in renaming
+    renamed = {os.path.basename(op.src) for op in ops}
+
+    # Heuristic keywords for likely outliers
+    keywords = ["PSArips.com", ".url", ".txt", "RARBG", "ReadMe"]
+    outliers = [
+        f for f in all_files
+        if f not in renamed and any(kw in f for kw in keywords)
+    ]
+
+    if not outliers:
+        logger.info(f"[Outliers] No outlier files detected in '{directory}'.")
+        return
+
+    logger.warning(f"[Outliers] Detected {len(outliers)} potential outlier file(s):")
+    for f in outliers:
+        logger.warning(f"    • {f}")
+
+    # Prompt user
+    prompt = (
+        "\n[Outliers] What should be done with these files?\n"
+        "  1) Keep them\n"
+        "  2) Delete them\n"
+        "Choice [1/2]: "
+    )
+    while True:
+        choice = input(prompt).strip()
+        if choice == "1":
+            logger.info("[Outliers] Keeping all outlier files.")
+            return
+        elif choice == "2":
+            for f in outliers:
+                path = os.path.join(directory, f)
+                try:
+                    os.remove(path)
+                    logger.info(f"[Outliers] Deleted '{f}'.")
+                except OSError as e:
+                    logger.error(f"[Outliers] Failed to delete '{f}': {e}")
+            return
+        else:
+            logger.warning("[Outliers] Invalid choice; please enter 1 or 2.")
+
+# ─────────────────────────────────────────────
+# Timeout‐aware confirmation
+# ─────────────────────────────────────────────
+class TimeoutException(Exception):
+    pass
+
+def _timeout_handler(signum, frame):
+    raise TimeoutException()
+
+def confirm(prompt="Proceed? [y/N]: ", timeout=15):
+    """
+    Ask the user to confirm. Returns True only if they type 'y' or 'yes'.
+    After `timeout` seconds, automatically returns False.
+    """
+    if AUTO_RUN:
+        logger.info(f"[Confirm] AUTO_RUN enabled, skipping prompt: '{prompt.strip()}'")
+        return False
+
+    signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(timeout)
+    try:
+        resp = input(prompt).strip().lower()
+        if resp in ("y", "yes"):
+            logger.info(f"[Confirm] Received affirmative response.")
+            return True
+        else:
+            logger.info(f"[Confirm] Received negative or empty response.")
+            return False
+    except TimeoutException:
+        logger.warning(f"[Confirm] No response in {timeout}s, defaulting to 'no'.")
+        return False
+    except KeyboardInterrupt:
+        logger.warning("[Confirm] KeyboardInterrupt received, defaulting to 'no'.")
+        return False
+    finally:
+        signal.alarm(0)
+
+# ─────────────────────────────────────────────
 # Main routine
 # ─────────────────────────────────────────────
 def main():
@@ -167,15 +266,36 @@ def main():
         logger.info("Nothing to rename.")
         return
 
+    check_outliers(ops)
+
     preview(ops)
-    if not AUTO_RUN and not confirm():
-        logger.info("User aborted, no changes applied.")
+    if not confirm("Apply rename operations? [y/N]: "):
+        logger.info("User aborted before renaming.")
         return
 
-    executed = apply_ops(ops)
+    try:
+        executed = apply_ops(ops)
+    except Exception as e:
+        logger.error(f"[Main] Fatal error during rename operations: {e}")
+        return
 
-    if executed and not AUTO_RUN and confirm("Rollback all changes? [y/N]: "):
-        rollback(executed)
+    if not executed:
+        logger.error("[Main] No rename operations succeeded; nothing to rollback.")
+        return
 
-if __name__ == '__main__':
-    main()
+    # Final rollback prompt
+    if confirm("Rollback all changes? [y/N]: "):
+        try:
+            rollback(executed)
+            logger.info("[Main] Rollback completed successfully.")
+        except Exception as e:
+            logger.error(f"[Main] Error during rollback: {e}")
+    else:
+        logger.info("[Main] Rename operations committed.")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        logger.critical(f"[Main] Unhandled exception: {e}", exc_info=True)
+        sys.exit(1)
