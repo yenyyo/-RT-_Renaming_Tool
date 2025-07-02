@@ -11,7 +11,7 @@ A Python utility to bulk-rename your **TV Series files** into a clean, consisten
 
 1. **Mount** the remote series directory via SSHFS to a local path.
 2. **Scan** the mounted folder for season directories (e.g. `SEASON.01`, `S01`, etc.) and episode files.
-3. **Plan** a series of rename operations (folders first in preview, then files, then folders).
+3. **Plan** a series of rename operations (folders first in preview, then files).
 4. **Preview** the planned changes and ask for your confirmation.
 5. **Execute** the renames in a depth-aware order (files before their parent folders).
 6. **Rollback** option to undo all changes in one step, if needed.
